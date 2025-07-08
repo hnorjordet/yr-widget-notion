@@ -257,9 +257,52 @@
             return Math.round(temp) + '°';
         }
 
+        // Norwegian weather condition translations
+        const WEATHER_TRANSLATIONS = {
+            'clearsky': 'Klarvær',
+            'fair': 'Lettskyet',
+            'partlycloudy': 'Delvis skyet',
+            'cloudy': 'Skyet',
+            'rainshowers': 'Regnbyger',
+            'lightrain': 'Lett regn',
+            'rain': 'Regn',
+            'heavyrain': 'Kraftig regn',
+            'sleet': 'Sludd',
+            'snow': 'Snø',
+            'snowshowers': 'Snøbyger',
+            'fog': 'Tåke',
+            'thunderstorm': 'Tordenvær',
+            'lightrainsunandthunder': 'Lett regn og torden',
+            'lightrainandthunder': 'Lett regn og torden',
+            'rainandthunder': 'Regn og torden',
+            'lightsnow': 'Lett snø',
+            'heavysnow': 'Kraftig snø',
+            'lightsleet': 'Lett sludd',
+            'heavysleet': 'Kraftig sludd'
+        };
+
         function formatCondition(symbolCode) {
-            const condition = symbolCode.split('_')[0];
-            return condition.charAt(0).toUpperCase() + condition.slice(1).replace(/([A-Z])/g, ' $1');
+            // Remove the day/night suffix and any intensity modifiers
+            const baseCondition = symbolCode.split('_')[0]
+                .replace(/light|heavy/gi, '')
+                .replace(/showers/gi, '')
+                .toLowerCase();
+            
+            // Check for direct matches first
+            if (WEATHER_TRANSLATIONS[symbolCode.split('_')[0]]) {
+                return WEATHER_TRANSLATIONS[symbolCode.split('_')[0]];
+            }
+            
+            // Check for partial matches
+            for (const [key, translation] of Object.entries(WEATHER_TRANSLATIONS)) {
+                if (symbolCode.includes(key)) {
+                    return translation;
+                }
+            }
+            
+            // Fallback to capitalized version
+            return symbolCode.split('_')[0].charAt(0).toUpperCase() + 
+                   symbolCode.split('_')[0].slice(1);
         }
 
         function getDayName(dateStr, index) {
