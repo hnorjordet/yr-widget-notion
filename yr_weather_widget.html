@@ -48,6 +48,32 @@
             color: #ffffff;
             font-size: 18px;
             font-weight: 600;
+            cursor: pointer;
+            padding: 4px 8px;
+            border-radius: 6px;
+            transition: all 0.2s ease;
+        }
+
+        .location-title:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .location-input {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(96, 165, 250, 0.3);
+            color: #ffffff;
+            font-size: 18px;
+            font-weight: 600;
+            padding: 4px 8px;
+            border-radius: 6px;
+            outline: none;
+            min-width: 120px;
+            max-width: 300px;
+        }
+
+        .location-input:focus {
+            border-color: #60a5fa;
+            background: rgba(96, 165, 250, 0.1);
         }
 
         .location-button {
@@ -218,7 +244,10 @@
             lon: 10.7522
         };
 
+        // Store current weather data and state
+        let currentWeatherData = null;
         let currentLocation = DEFAULT_LOCATION;
+        let isEditingLocation = false;
 
         // Weather symbol mapping (simplified emoji for now)
         const WEATHER_SYMBOLS = {
@@ -235,27 +264,6 @@
             'fog': { day: '🌫️', night: '🌫️' },
             'thunderstorm': { day: '⛈️', night: '⛈️' }
         };
-
-        function getWeatherIcon(symbolCode) {
-            // Parse yr.no symbol codes (e.g., "clearsky_day", "rain_night")
-            const parts = symbolCode.split('_');
-            const condition = parts[0];
-            const timeOfDay = parts[1] || 'day';
-            
-            // Find matching symbol
-            for (const [key, icons] of Object.entries(WEATHER_SYMBOLS)) {
-                if (condition.includes(key)) {
-                    return icons[timeOfDay] || icons.day;
-                }
-            }
-            
-            // Default icons
-            return timeOfDay === 'night' ? '🌙' : '☀️';
-        }
-
-        function formatTemperature(temp) {
-            return Math.round(temp) + '°';
-        }
 
         // Norwegian weather condition translations
         const WEATHER_TRANSLATIONS = {
@@ -280,6 +288,27 @@
             'lightsleet': 'Lett sludd',
             'heavysleet': 'Kraftig sludd'
         };
+
+        function getWeatherIcon(symbolCode) {
+            // Parse yr.no symbol codes (e.g., "clearsky_day", "rain_night")
+            const parts = symbolCode.split('_');
+            const condition = parts[0];
+            const timeOfDay = parts[1] || 'day';
+            
+            // Find matching symbol
+            for (const [key, icons] of Object.entries(WEATHER_SYMBOLS)) {
+                if (condition.includes(key)) {
+                    return icons[timeOfDay] || icons.day;
+                }
+            }
+            
+            // Default icons
+            return timeOfDay === 'night' ? '🌙' : '☀️';
+        }
+
+        function formatTemperature(temp) {
+            return Math.round(temp) + '°';
+        }
 
         function formatCondition(symbolCode) {
             // Remove the day/night suffix and any intensity modifiers
@@ -397,56 +426,59 @@
             };
         }
 
-        function displayWeatherData(weatherData) {
-            const { current, forecast } = weatherData;
-            
-            const content = `
-                <div class="header">
-                    <div class="location-section">
-                        <div class="location-title">🌤️ ${currentLocation.name}</div>
-                        <button class="location-button" onclick="getCurrentLocation()">📍 Min posisjon</button>
-                    </div>
-                    <div class="status-section">
-                        <div class="last-updated">
-                            ${new Date().toLocaleTimeString('nb-NO', { 
-                                hour: '2-digit', 
-                                minute: '2-digit',
-                                timeZone: 'Europe/Oslo'
-                            })}
-                        </div>
-                    </div>
-                </div>
+        function startLocationEdit() {
+            isEditingLocation = true;
+            displayCurrentWeather();
+        }
+
+        function finishLocationEdit(inputElement) {
+            const newLocationName = inputElement.value.trim();
+            if (newLocationName && newLocationName !== currentLocation.name) {
+                searchLocation(newLocationName);
+            } else {
+                isEditingLocation = false;
+                displayCurrentWeather();
+            }
+        }
+
+        async function searchLocation(locationName) {
+            try {
+                // Use Nominatim to geocode the location name
+                const geocodeResponse = await fetch(
+                    `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(locationName)}&format=json&limit=1&accept-language=no,en`
+                );
+                const geocodeData = await geocodeResponse.json();
                 
-                <div class="current-weather">
-                    <div class="weather-icon">
-                        ${getWeatherIcon(current.condition)}
-                    </div>
-                    <div class="current-info">
-                        <div class="current-temp">${formatTemperature(current.temperature)}</div>
-                        <div class="current-condition">${formatCondition(current.condition)}</div>
-                        <div class="current-details">
-                            Fuktighet: ${Math.round(current.humidity)}% • Vind: ${Math.round(current.windSpeed)} m/s
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="forecast-container">
-                    <div class="forecast-grid">
-                        ${forecast.slice(0, 7).map((day, index) => `
-                            <div class="forecast-day">
-                                <div class="day-name">${getDayName(day.date, index)}</div>
-                                <div class="day-icon">${getWeatherIcon(day.symbolCode)}</div>
-                                <div class="day-temps">
-                                    <div class="day-high">${formatTemperature(day.maxTemp)}</div>
-                                    <div class="day-low">${formatTemperature(day.minTemp)}</div>
-                                </div>
-                            </div>
-                        `).join('')}
-                    </div>
-                </div>
-            `;
-            
-            document.getElementById('content').innerHTML = content;
+                if (geocodeData.length > 0) {
+                    const result = geocodeData[0];
+                    const lat = Math.round(parseFloat(result.lat) * 10000) / 10000; // 4 decimals
+                    const lon = Math.round(parseFloat(result.lon) * 10000) / 10000;
+                    
+                    // Use the display name from Nominatim, but clean it up
+                    let displayName = result.display_name.split(',')[0]; // First part (city/area name)
+                    if (displayName.length > 30) {
+                        displayName = locationName; // Fallback to user input if too long
+                    }
+                    
+                    currentLocation = {
+                        name: displayName,
+                        lat: lat,
+                        lon: lon
+                    };
+                    
+                    isEditingLocation = false;
+                    await updateWeather();
+                } else {
+                    alert(`Could not find location: ${locationName}`);
+                    isEditingLocation = false;
+                    displayCurrentWeather();
+                }
+            } catch (error) {
+                console.error('Error searching location:', error);
+                alert('Error searching for location. Please try again.');
+                isEditingLocation = false;
+                displayCurrentWeather();
+            }
         }
 
         async function getCurrentLocation() {
@@ -495,10 +527,77 @@
             }
         }
 
+        function displayWeatherData(weatherData) {
+            const { current, forecast } = weatherData;
+            
+            // Location section - either clickable title or input field
+            const locationHtml = isEditingLocation ? 
+                `<input type="text" class="location-input" value="${currentLocation.name}" 
+                        onblur="finishLocationEdit(this)" 
+                        onkeypress="if(event.key==='Enter') finishLocationEdit(this)"
+                        autofocus>` :
+                `<div class="location-title" onclick="startLocationEdit()" title="Click to edit location">🌤️ ${currentLocation.name}</div>`;
+            
+            const content = `
+                <div class="header">
+                    <div class="location-section">
+                        ${locationHtml}
+                        <button class="location-button" onclick="getCurrentLocation()">📍 Min posisjon</button>
+                    </div>
+                    <div class="status-section">
+                        <div class="last-updated">
+                            ${new Date().toLocaleTimeString('nb-NO', { 
+                                hour: '2-digit', 
+                                minute: '2-digit',
+                                timeZone: 'Europe/Oslo'
+                            })}
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="current-weather">
+                    <div class="weather-icon">
+                        ${getWeatherIcon(current.condition)}
+                    </div>
+                    <div class="current-info">
+                        <div class="current-temp">${formatTemperature(current.temperature)}</div>
+                        <div class="current-condition">${formatCondition(current.condition)}</div>
+                        <div class="current-details">
+                            Fuktighet: ${Math.round(current.humidity)}% • Vind: ${Math.round(current.windSpeed)} m/s
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="forecast-container">
+                    <div class="forecast-grid">
+                        ${forecast.slice(0, 7).map((day, index) => `
+                            <div class="forecast-day">
+                                <div class="day-name">${getDayName(day.date, index)}</div>
+                                <div class="day-icon">${getWeatherIcon(day.symbolCode)}</div>
+                                <div class="day-temps">
+                                    <div class="day-high">${formatTemperature(day.maxTemp)}</div>
+                                    <div class="day-low">${formatTemperature(day.minTemp)}</div>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+            
+            document.getElementById('content').innerHTML = content;
+        }
+
+        function displayCurrentWeather() {
+            if (currentWeatherData) {
+                displayWeatherData(currentWeatherData);
+            }
+        }
+
         async function updateWeather() {
             try {
                 const rawData = await fetchWeatherData();
                 const weatherData = parseWeatherData(rawData);
+                currentWeatherData = weatherData; // Store for later use
                 displayWeatherData(weatherData);
             } catch (error) {
                 console.error('Error updating weather:', error);
